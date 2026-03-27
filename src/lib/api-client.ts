@@ -9,7 +9,7 @@ export function getClient(): RcrtClient {
       apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:8080',
       adapter: {
         getToken: () => getAuthToken(),
-        getTenantId: () => localStorage.getItem('rcrt_tenant_id'),
+        getTenantId: () => import.meta.env.VITE_TENANT_ID || localStorage.getItem('rcrt_tenant_id'),
         onUnauthorized: async () => 'abort',
       },
     });
