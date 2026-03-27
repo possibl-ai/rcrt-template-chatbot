@@ -1,5 +1,5 @@
-import { createClient, RcrtClient } from '@rcrt/api';
-import { getAuth } from 'firebase/auth';
+import { createClient, RcrtClient } from './rcrt-api';
+import { getAuthToken } from './auth';
 
 let client: RcrtClient | null = null;
 
@@ -8,14 +8,7 @@ export function getClient(): RcrtClient {
     client = createClient({
       apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:8080',
       adapter: {
-        getToken: async () => {
-          try {
-            const auth = getAuth();
-            const user = auth.currentUser;
-            if (user) return user.getIdToken();
-          } catch {}
-          return localStorage.getItem('rcrt_token');
-        },
+        getToken: () => getAuthToken(),
         getTenantId: () => localStorage.getItem('rcrt_tenant_id'),
         onUnauthorized: async () => 'abort',
       },
@@ -27,3 +20,5 @@ export function getClient(): RcrtClient {
 export function resetClient(): void {
   client = null;
 }
+
+export type { RcrtClient };

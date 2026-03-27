@@ -9,8 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@rcrt/api": "workspace:*",
-    "@rcrt/ui": "workspace:*",
     "firebase": "^11.6.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
