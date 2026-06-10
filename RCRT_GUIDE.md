@@ -1,73 +1,108 @@
-# rcrt-template-chatbot
+# rcrt-template-chatbot — Agent Guide
 
-> Agent-facing guide. Read this before editing any file in this template.
+> Guide for AI coding agents working in this repo. Generated from the
+> code-studio knowledge base — matches the actual source in this template.
 
 ## What This Template Does
 
-A full-screen chat interface connected to an RCRT agent via SSE streaming. Includes session list, message history, and agent switching. Use for chat-first applications: AI assistants, customer support, Q&A tools, conversational agents.
+A full-screen chat app connected to an RCRT agent: user messages go out via
+`client.sendChat(text, sessionId)`, assistant replies stream back over SSE
+(`client.connectEvents`) filtered by the `session:{id}` tag. Session history,
+settings page, responsive layout. Use for chat-first apps: assistants,
+support bots, Q&A tools.
 
-## Rules
-- NEVER rewrite the chat component — it is pre-built in src/components/chat/
-- NEVER modify auth.tsx — the template has correct auth out of the box
-- NEVER add custom SSE logic — use the pre-built useChat hook
-
-## Pre-Built — Do Not Reimplement
-
-| What | Import | Usage |
-|---|---|---|
-| ChatInterface | src/components/chat/ChatInterface.tsx | `<ChatInterface agentId="my-agent" />` |
-| useChat | src/hooks/useChat.ts | const { messages, sendMessage, isStreaming } = useChat(agentId) |
-| SessionList | src/components/chat/SessionList.tsx | `<SessionList onSelect={setSession} />` |
-| MessageBubble | src/components/chat/MessageBubble.tsx | Used inside ChatInterface — rarely need directly |
-| RcrtClient | src/lib/api-client.ts | const client = getRcrtClient() |
-
-## File Structure
+## Actual File Structure (verified against the repo)
 
 ```
 src/
-  App.tsx                    ← CONFIG: add routes here
+  App.tsx                          routes: / and /session/:id → ChatPage, /sessions, /settings
   pages/
-    ChatPage.tsx             ← TOUCH: your main chat page
-    SettingsPage.tsx         ← TOUCH: optional settings
-  components/
-    chat/                    ← LEAVE: ChatInterface, SessionList, MessageBubble
-    layout/                  ← LEAVE: AppLayout, nav
-  hooks/
-    useChat.ts               ← LEAVE: SSE + session management
+    ChatPage.tsx                   ← the WHOLE chat UI is inline here. Edit directly.
+    SessionsPage.tsx               session list via client.getSessions()
+    SettingsPage.tsx               placeholder settings
+  components/layout/AppLayout.tsx  sidebar/bottom nav (add nav items here)
   lib/
-    api-client.ts            ← LEAVE: RcrtClient singleton
-    auth.tsx                 ← LEAVE: DO NOT MODIFY
+    api-client.ts  auth.tsx  rcrt-api.ts  store.ts (zustand: sessionId + messages)  utils.ts (cn)
 ```
 
-## Adding a New Page
+There is NO `src/components/chat/`, NO `useChat` hook, NO ChatInterface
+component. The message list, input box, and SSE wiring are all inline in
+`ChatPage.tsx` (~130 lines) — restyle or extend it in place.
 
-1. Create `src/pages/MyPage.tsx`
-2. Add `<Route path="/my-page" element={<MyPage />} />` in App.tsx
-3. Add nav item in `src/components/layout/AppLayout.tsx`
+## The RCRT client (vendored — NOT an npm package)
 
-## Connecting to an Agent
+Every template vendors its client at `src/lib/rcrt-api.ts` and exposes a
+singleton via `src/lib/api-client.ts`:
+
+```ts
+import { getClient } from '../lib/api-client';
+const client = getClient();
+```
+
+Real method signatures (use these EXACTLY — `queryBreadcrumbs` takes
+positional args, not an options object):
+
+```ts
+queryBreadcrumbs(tags: string[], limit = 100): Promise<Breadcrumb[]>
+createBreadcrumb({ name?, title?, tags?, content?, upsert? }): Promise<Breadcrumb>
+getBreadcrumb(id): Promise<Breadcrumb>
+updateBreadcrumb(id, { title?, content?, tags?, version }): Promise<Breadcrumb>  // version REQUIRED
+deleteBreadcrumb(id): Promise<void>
+sendChat(message, sessionId?): Promise<{ id, session_id }>   // reply arrives via SSE, not the response
+getSessions(limit = 30) / getSessionMessages(sessionId, limit = 100)
+uploadFile(file) / getFileDownloadUrl(fileId) / getFileText(fileId)
+connectEvents(onEvent): () => void   // SSE: onEvent({ type: 'breadcrumb', data }) — returns disconnect fn
+resolveService(name)
+```
+
+Realtime pattern (the ONLY supported way — never hand-roll EventSource):
 
 ```tsx
-import { ChatInterface } from '../components/chat/ChatInterface';
-
-export function MyChat() {
-  return <ChatInterface agentId="my-rcrt-agent" sessionId={sessionId} />;
-}
+useEffect(() => {
+  const disconnect = getClient().connectEvents(({ type, data }) => {
+    if (type !== 'breadcrumb') return;
+    const event = data as any;
+    const tags: string[] = event.tags || [];
+    // filter by your tags, e.g. tags.includes(`session:${sessionId}`)
+  });
+  return disconnect;
+}, [deps]);
 ```
 
-## Common Patterns
+DO NOT import `@possibl/rcrt-api` or `@possibl/rcrt-ui` — they are NOT in
+package.json. Use the vendored client and build UI with Tailwind + lucide-react.
 
-### Pattern 1: Multiple agents on different pages
-Create separate pages, each with a different `agentId` prop on ChatInterface.
+## Hard rules
 
-### Pattern 2: Sidebar with context
-Add a right panel next to ChatInterface with breadcrumb data relevant to the conversation:
-```tsx
-<div style={{display:'flex'}}>
-  <ChatInterface agentId="chat" />
-  <ContextPanel breadcrumbTags={['type:contact', 'session:active']} />
-</div>
-```
+- `npm run build` runs `tsc && vite build` — your code MUST typecheck or the
+  Cloud Run deploy fails. No `any`-typed imports of nonexistent modules.
+- NEVER modify `src/lib/rcrt-api.ts`, `src/lib/api-client.ts`, or
+  `src/lib/auth.tsx` — auth + client are correct out of the box.
+- NEVER add a database, REST API layer, or custom auth. Data is breadcrumbs.
+- New deps: edit package.json only when truly needed; prefer what's installed
+  (react-router-dom v7, zustand, lucide-react, tailwind, clsx/tailwind-merge via `cn()`).
 
-### Pattern 3: Pre-loaded knowledge
-Pass initial system context to the agent via a breadcrumb created before starting the session.
+## Adding a page
+
+1. Create `src/pages/MyPage.tsx` (default export).
+2. Add `<Route path="/my-page" element={<MyPage />} />` inside the layout route in `src/App.tsx`.
+3. Add a nav item in `src/components/layout/AppLayout.tsx`.
+
+## Env (.env — injected automatically by `project init-repo` and the preview)
+
+`VITE_API_URL`, `VITE_TENANT_ID`, `VITE_RCRT_PREVIEW_TOKEN` (preview auth),
+optional `VITE_FIREBASE_API_KEY` / `VITE_FIREBASE_AUTH_DOMAIN` /
+`VITE_FIREBASE_PROJECT_ID` (production auth). `src/lib/auth.tsx` picks
+Firebase when `VITE_FIREBASE_API_KEY` is set, else falls back to the preview
+token. Styling: Tailwind design tokens in `src/index.css` (`--primary`,
+`--background`, ...) — change theme there.
+
+## Common patterns
+
+- **Point at your agent**: `sendChat` talks to the workspace's default chat
+  agent. Create your in-app agent with the `agent` tool and make it the
+  default (tag `interface:chat-default`), or extend `sendChat` usage if the
+  backend exposes agent routing.
+- **Seed FAQ/knowledge**: store domain knowledge as `knowledge` breadcrumbs in
+  the workspace; the agent (not the frontend) reads them.
+- **Branding**: index.css tokens + the empty-state copy in ChatPage.
