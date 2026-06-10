@@ -13,8 +13,9 @@ export const useStore = create<AppState>((set) => ({
   setSessionId: (id) => set({ sessionId: id }),
   messages: [],
   addMessage: (msg) =>
-    set((state) => ({
-      messages: [...state.messages, { ...msg, timestamp: new Date().toISOString() }],
-    })),
+    set((state) => {
+      if (msg.id && state.messages.some((m) => m.id === msg.id)) return state;
+      return { messages: [...state.messages, { ...msg, timestamp: new Date().toISOString() }] };
+    }),
   clearMessages: () => set({ messages: [] }),
 }));
